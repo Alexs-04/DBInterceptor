@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title th:text="'Tabla: ' + ${tableName}"></title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <style>
+        .data-type {
+            font-family: 'Courier New', monospace;
+            background-color: #f8f9fa;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+        .index-unique { color: #28a745; }
+        .index-normal { color: #6c757d; }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-light bg-light">
+    <div class="container">
+        <a class="navbar-brand" href="/">DB Inspector</a>
+        <span class="navbar-text">
+                <a th:href="@{/schema(owner=${owner})}" th:text="${owner}"></a>
+                <i class="bi bi-chevron-right"></i>
+                <strong th:text="${tableName}"></strong>
+            </span>
+    </div>
+</nav>
+
+<div class="container mt-4">
+    <!-- Encabezado de la tabla -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <div>
+                <h4 class="mb-0">
+                    <i class="bi bi-table"></i>
+                    <span th:text="${tableName}"></span>
+                </h4>
+                <small>Esquema: <span th:text="${owner}"></span></small>
+            </div>
+            <div>
+                    <span class="badge bg-light text-dark me-2">
+                        <i class="bi bi-columns"></i> <span th:text="${details.columns.size()}"></span> columnas
+                    </span>
+                <span class="badge bg-light text-dark">
+                        <i class="bi bi-list-stars"></i> <span th:text="${details.indexes.size()}"></span> índices
+                    </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mensaje si no hay detalles -->
+    <div th:if="${details == null}" class="alert alert-danger">
+        <i class="bi bi-exclamation-triangle"></i> No se pudieron obtener los detalles de la tabla <strong th:text="${tableName}"></strong>.
+        <a th:href="@{/schema(owner=${owner})}" class="alert-link">Volver al esquema</a>
+    </div>
+
+    <!-- Columnas -->
+    <div class="card mb-4" th:if="${details != null}">
+        <div class="card-header">
+            <i class="bi bi-columns-gap"></i> Columnas
+            <span class="badge bg-secondary float-end" th:text="${details.columns.size()}"></span>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-responsive">
+                <table class="table table-hover table-sm mb-0">
+                    <thead class="table-light">
+                    <tr>
+                        <th>#</th>
+                        <th>Nombre</th>
+                        <th>Tipo de Dato</th>
+                        <th>Longitud/Precisión</th>
+                        <th>Nulable</th>
+                        <th>PostgreSQL Equivalente</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    <tr th:each="col, iter : ${details.columns}">
+                        <td th:text="${iter.index + 1}"></td>
+                        <td>
+                            <strong th:text="${col.name}"></strong>
+                        </td>
+                        <td>
+                            <span class="data-type" th:text="${col.type}"></span>
+                        </td>
+                        <td>
+                            <div th:if="${col.length != null}">
+                                <span th:text="${col.length}"></span>
+                                <small class="text-muted">caracteres</small>
+                            </div>
+                            <div th:if="${col.precision != null and col.scale != null}">
+                                <span th:text="${col.precision}"></span>,
+                                <span th:text="${col.scale}"></span>
+                                <small class="text-muted">(precisión, escala)</small>
+                            </div>
+                            <div th:if="${col.length == null and col.precision == null}">
+                                <span class="text-muted">-</span>
+                            </div>
+                        </td>
+                        <td>
+                            <span th:if="${col.nullable}" class="badge bg-warning text-dark">SÍ</span>
+                            <span th:unless="${col.nullable}" class="badge bg-dark">NO</span>
+                        </td>
+                        <td>
+                                    <span class="data-type text-success">
+                                        <span th:switch="${#strings.toUpperCase(col.type)}">
+                                            <span th:case="'VARCHAR2'">
+                                                VARCHAR(<span th:text="${col.length ?: 255}"></span>)
+                                            </span>
+                                            <span th:case="'NUMBER'">
+                                                <span th:if="${col.scale != null and col.scale > 0}">
+                                                    NUMERIC(<span th:text="${col.precision}"></span>,<span th:text="${col.scale}"></span>)
+                                                </span>
+                                                <span th:unless="${col.scale != null and col.scale > 0}">
+                                                    <span th:if="${col.precision != null}">
+                                                        NUMERIC(<span th:text="${col.precision}"></span>)
+                                                    </span>
+                                                    <span th:unless="${col.precision != null}">NUMERIC</span>
+                                                </span>
+                                            </span>
+                                            <span th:case="'DATE'">TIMESTAMP</span>
+                                            <span th:case="'TIMESTAMP'">TIMESTAMP</span>
+                                            <span th:case="'CLOB'">TEXT</span>
+                                            <span th:case="'BLOB'">BYTEA</span>
+                                            <span th:case="'RAW'">BYTEA</span>
+                                            <span th:case="'CHAR'">CHAR(<span th:text="${col.length}"></span>)</span>
+                                            <span th:case="'FLOAT'">DOUBLE PRECISION</span>
+                                            <span th:case="*">TEXT</span>
+                                        </span>
+                                    </span>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Índices -->
+    <div class="card mb-4" th:if="${details != null and not details.indexes.empty}">
+        <div class="card-header">
+            <i class="bi bi-list-stars"></i> Índices
+            <span class="badge bg-warning text-dark float-end" th:text="${details.indexes.size()}"></span>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div th:each="index : ${details.indexes}" class="col-md-6 mb-3">
+                    <div class="card">
+                        <div class="card-body">
+                            <h6 class="card-title d-flex justify-content-between">
+                                <span th:text="${index.name}"></span>
+                                <span th:if="${index.unique}" class="badge bg-success">ÚNICO</span>
+                                <span th:unless="${index.unique}" class="badge bg-secondary">NO ÚNICO</span>
+                            </h6>
+                            <small class="text-muted">
+                                <span th:text="${index.unique} ? 'Garantiza unicidad de valores' : 'Mejora rendimiento de búsqueda'"></span>
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-3">
+        <a th:href="@{/schema(owner=${owner})}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Volver al Esquema
+        </a>
+        <a href="/" class="btn btn-outline-secondary ms-2">
+            <i class="bi bi-house"></i> Inicio
+        </a>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src=""></script>
+</body>
+</html>

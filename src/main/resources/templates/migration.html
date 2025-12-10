@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="es" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <title>Análisis de Migración: Oracle → PostgreSQL</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.8.1/font/bootstrap-icons.css">
+    <style>
+        .compatibility-badge {
+            font-size: 0.9em;
+            padding: 5px 10px;
+            border-radius: 20px;
+        }
+        .migration-step {
+            border-left: 4px solid #0d6efd;
+            padding-left: 15px;
+            margin-bottom: 20px;
+        }
+        .risk-high { border-color: #dc3545; }
+        .risk-medium { border-color: #ffc107; }
+        .risk-low { border-color: #198754; }
+        .type-mapping {
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            padding: 10px;
+            margin: 5px 0;
+            border-left: 3px solid #6f42c1;
+        }
+        .recommendation-card {
+            transition: transform 0.2s;
+        }
+        .recommendation-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .progress {
+            height: 25px;
+        }
+        .compatibility-score {
+            font-size: 2.5em;
+            font-weight: bold;
+            text-align: center;
+        }
+        .big-icon.lucide {
+            width: 40px;
+            height: 40px;
+            stroke-width: 2.5;
+        }
+    </style>
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container">
+        <a class="navbar-brand" href="/">DB Inspector</a>
+        <span class="navbar-text text-light">
+            Migración: <strong th:text="${owner}"></strong> (Oracle → PostgreSQL)
+        </span>
+    </div>
+</nav>
+
+<div class="container-fluid mt-4">
+    <!-- Encabezado -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h1><i class="bi bi-arrow-right-circle"></i> Análisis de Migración</h1>
+            <p class="lead">Evaluación de compatibilidad para migrar de Oracle a PostgreSQL</p>
+        </div>
+        <div class="col-md-4 text-end">
+            <div th:class="${analysis.compatible ? 'compatibility-score text-success' : 'compatibility-score text-danger'}">
+                <i th:attr="data-lucide=${analysis.compatible ? 'check' : 'triangle-alert'}" class="big-icon"></i>
+            </div>
+            <span th:class="${analysis.compatible ? 'badge bg-success' : 'badge bg-danger'}">
+                <span th:text="${analysis.compatible ? 'COMPATIBLE' : 'REQUIERE AJUSTES'}"></span>
+            </span>
+        </div>
+    </div>
+
+    <!-- Resumen -->
+    <div class="card mb-4">
+        <div class="card-header bg-primary text-white">
+            <i class="bi bi-clipboard-data"></i> Resumen Ejecutivo
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-3 text-center">
+                    <div class="display-6" th:text="${schema.totalTables}"></div>
+                    <div class="text-muted">Tablas a migrar</div>
+                </div>
+                <div class="col-md-3 text-center">
+                    <div class="display-6" th:text="${schema.totalViews}"></div>
+                    <div class="text-muted">Vistas a migrar</div>
+                </div>
+                <div class="col-md-3 text-center">
+                    <div th:class="${analysis.estimatedComplexity == 'ALTA'
+                                     ? 'display-6 text-danger'
+                                     : (analysis.estimatedComplexity == 'MEDIA'
+                                         ? 'display-6 text-warning'
+                                         : 'display-6 text-success')}">
+                        <span th:text="${analysis.estimatedComplexity}"></span>
+                    </div>
+                    <div class="text-muted">Complejidad</div>
+                </div>
+                <div class="col-md-3 text-center">
+                    <div class="display-6" th:text="${analysis.compatibilityIssues.size()}"></div>
+                    <div class="text-muted">Problemas detectados</div>
+                </div>
+            </div>
+            <div class="progress mt-3">
+                <div th:class="${analysis.compatibilityIssues.size() == 0
+                                 ? 'progress-bar bg-success'
+                                 : (analysis.compatibilityIssues.size() < 5
+                                     ? 'progress-bar bg-warning'
+                                     : 'progress-bar bg-danger')}"
+                     th:style="${'width: ' + (100 - (analysis.compatibilityIssues.size() * 10)) + '%'}">
+                    <span th:text="${'Compatible: ' + (100 - (analysis.compatibilityIssues.size() * 10)) + '%'}"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Panel izquierdo: Problemas y Recomendaciones -->
+        <div class="col-md-6">
+            <!-- Problemas de compatibilidad -->
+            <div class="card mb-4" th:if="${not analysis.compatibilityIssues.empty}">
+                <div class="card-header bg-danger text-white d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-exclamation-triangle"></i> Problemas de Compatibilidad</span>
+                    <span class="badge bg-light text-dark" th:text="${analysis.compatibilityIssues.size()}"></span>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-danger">
+                        <i class="bi bi-info-circle"></i>
+                        Estos problemas deben resolverse antes de la migración.
+                    </div>
+                    <div class="list-group">
+                        <div th:each="issue, iter : ${analysis.compatibilityIssues}"
+                             class="list-group-item list-group-item-action">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h6 class="mb-1">Problema #<span th:text="${iter.index + 1}"></span></h6>
+                                <small class="text-danger">CRÍTICO</small>
+                            </div>
+                            <p class="mb-1" th:text="${issue}"></p>
+                            <small class="text-muted">Requerirá modificación manual</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recomendaciones -->
+            <div class="card mb-4">
+                <div class="card-header bg-info text-white">
+                    <i class="bi bi-lightbulb"></i> Recomendaciones
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div th:each="rec, iter : ${analysis.recommendations}"
+                             th:class="${iter.index < 4 ? 'col-md-6 mb-3' : 'col-md-12 mb-2'}">
+                            <div class="card recommendation-card h-100">
+                                <div class="card-body">
+                                    <h6 class="card-title">
+                                        <i class="bi bi-check-circle text-success"></i>
+                                        <span th:text="${rec}"></span>
+                                    </h6>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel derecho: Mapeo de tipos y pasos -->
+        <div class="col-md-6">
+            <!-- Mapeo de tipos de datos -->
+            <div class="card mb-4">
+                <div class="card-header bg-success text-white">
+                    <i class="bi bi-arrow-left-right"></i> Mapeo de Tipos de Datos
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Conversión automática sugerida:</p>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <thead>
+                            <tr>
+                                <th>Oracle</th>
+                                <th>→</th>
+                                <th>PostgreSQL</th>
+                                <th>Notas</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr>
+                                <td><code>VARCHAR2(n)</code></td>
+                                <td>→</td>
+                                <td><code>VARCHAR(n)</code></td>
+                                <td><span class="badge bg-success">Directo</span></td>
+                            </tr>
+                            <tr>
+                                <td><code>NUMBER(p,s)</code></td>
+                                <td>→</td>
+                                <td><code>NUMERIC(p,s)</code></td>
+                                <td><span class="badge bg-success">Directo</span></td>
+                            </tr>
+                            <tr>
+                                <td><code>DATE</code></td>
+                                <td>→</td>
+                                <td><code>TIMESTAMP</code></td>
+                                <td><span class="badge bg-warning">Precisión</span></td>
+                            </tr>
+                            <tr>
+                                <td><code>CLOB</code></td>
+                                <td>→</td>
+                                <td><code>TEXT</code></td>
+                                <td><span class="badge bg-success">Directo</span></td>
+                            </tr>
+                            <tr>
+                                <td><code>BLOB</code></td>
+                                <td>→</td>
+                                <td><code>BYTEA</code></td>
+                                <td><span class="badge bg-success">Directo</span></td>
+                            </tr>
+                            <tr>
+                                <td><code>RAW(n)</code></td>
+                                <td>→</td>
+                                <td><code>BYTEA</code></td>
+                                <td><span class="badge bg-info">Tamaño variable</span></td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="mt-3">
+                        <h6>Ejemplos específicos:</h6>
+                        <div class="type-mapping"
+                             th:each="mapping, iter : ${analysis.typeMappings}"
+                             th:if="${iter.index < 5}">
+                            <div class="d-flex justify-content-between">
+                                <strong th:text="${mapping.key}"></strong>
+                                <small class="text-muted">Columna</small>
+                            </div>
+                            <code th:text="${mapping.value}"></code>
+                        </div>
+                        <div th:if="${analysis.typeMappings.size() > 5}" class="text-center mt-2">
+                            <small class="text-muted">
+                                ... y <span th:text="${analysis.typeMappings.size() - 5}"></span> mapeos más
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pasos de migración -->
+            <div class="card">
+                <div class="card-header bg-warning">
+                    <i class="bi bi-list-ol"></i> Pasos Recomendados para la Migración
+                </div>
+                <div class="card-body">
+                    <div class="migration-step">
+                        <h6>1. Análisis y Planificación</h6>
+                        <p class="text-muted mb-1">Evaluar el esquema completo y definir estrategia</p>
+                        <span class="badge bg-info">Estimado: 2-3 días</span>
+                    </div>
+
+                    <div class="migration-step risk-low">
+                        <h6>2. Preparación del Entorno</h6>
+                        <p class="text-muted mb-1">Configurar PostgreSQL, usuarios y permisos</p>
+                        <span class="badge bg-success">Bajo riesgo</span>
+                    </div>
+
+                    <div th:class="${analysis.compatibilityIssues.empty
+                                     ? 'migration-step risk-low'
+                                     : (analysis.compatibilityIssues.size() < 5
+                                         ? 'migration-step risk-medium'
+                                         : 'migration-step risk-high')}">
+                        <h6>3. Conversión de Esquema</h6>
+                        <p class="text-muted mb-1">Migrar tablas, tipos de datos y restricciones</p>
+                        <span th:class="${analysis.compatibilityIssues.empty
+                                         ? 'badge bg-success'
+                                         : (analysis.compatibilityIssues.size() < 5
+                                             ? 'badge bg-warning'
+                                             : 'badge bg-danger')}">
+                            <span th:text="${analysis.compatibilityIssues.empty
+                                            ? 'Bajo riesgo'
+                                            : (analysis.compatibilityIssues.size() < 5
+                                                ? 'Riesgo medio'
+                                                : 'Alto riesgo')}"></span>
+                        </span>
+                    </div>
+
+                    <div class="migration-step risk-medium">
+                        <h6>4. Migración de Datos</h6>
+                        <p class="text-muted mb-1">Transferir datos con herramientas ETL</p>
+                        <span class="badge bg-warning">Medio riesgo</span>
+                    </div>
+
+                    <div class="migration-step risk-low">
+                        <h6>5. Validación y Pruebas</h6>
+                        <p class="text-muted mb-1">Verificar integridad y rendimiento</p>
+                        <span class="badge bg-success">Bajo riesgo</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Herramientas y recursos -->
+    <div class="card mt-4">
+        <div class="card-header bg-secondary text-white">
+            <i class="bi bi-tools"></i> Herramientas y Recursos Recomendados
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">Ora2Pg</h5>
+                            <p class="card-text">Herramienta gratuita para migración de Oracle a PostgreSQL</p>
+                            <a href="https://ora2pg.darold.net" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-box-arrow-up-right"></i> Visitar
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">AWS SCT</h5>
+                            <p class="card-text">AWS Schema Conversion Tool (gratuita)</p>
+                            <a href="https://aws.amazon.com/es/dms/schema-conversion-tool/" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-box-arrow-up-right"></i> Visitar
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card h-100">
+                        <div class="card-body">
+                            <h5 class="card-title">Documentación</h5>
+                            <p class="card-text">Guía oficial de migración PostgreSQL</p>
+                            <a href="https://www.postgresql.org/docs/current/migration.html" target="_blank" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-box-arrow-up-right"></i> Visitar
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Acciones -->
+    <div class="mt-4 d-flex justify-content-between">
+        <div>
+            <a th:href="@{/schema(owner=${owner})}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Volver al Esquema
+            </a>
+            <a href="/" class="btn btn-outline-secondary ms-2">
+                <i class="bi bi-house"></i> Inicio
+            </a>
+        </div>
+        <div>
+            <button class="btn btn-primary" onclick="window.print()">
+                <i class="bi bi-printer"></i> Imprimir Reporte
+            </button>
+            <button class="btn btn-success ms-2" data-bs-toggle="modal" data-bs-target="#exportModal">
+                <i class="bi bi-download"></i> Exportar
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal de Exportación -->
+<div class="modal fade" id="exportModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Exportar Reporte de Migración</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Seleccione el formato de exportación:</p>
+                <div class="list-group">
+                    <a href="#" class="list-group-item list-group-item-action">
+                        <i class="bi bi-file-text"></i> Reporte en PDF
+                    </a>
+                    <a href="#" class="list-group-item list-group-item-action">
+                        <i class="bi bi-file-excel"></i> Excel con detalles
+                    </a>
+                    <a href="#" class="list-group-item list-group-item-action">
+                        <i class="bi bi-file-code"></i> Scripts SQL iniciales
+                    </a>
+                    <a href="#" class="list-group-item list-group-item-action">
+                        <i class="bi bi-file-earmark-json"></i> JSON completo
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+<script>
+    lucide.createIcons();
+</script>
+</body>
+</html>
