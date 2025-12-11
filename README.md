@@ -51,11 +51,11 @@ Or using docker-compose:
 * ```yaml
   version: '3.8'
   services:
-  app:
-    image: db-interceptor:1.0
-    ports:
-      - "8080:8080"
-    container_name: db-interceptor
+    app:
+      image: db-interceptor:1.0
+      ports:
+        - "8080:8080"
+      container_name: db-interceptor
 ---
 
 ### Usage
