@@ -1,4 +1,4 @@
-package atlix.dbiceptor.logic.config.exception
+package korebit.dbiceptor.logic.config.exception
 
 import org.springframework.http.HttpStatus
 import org.springframework.web.bind.annotation.ControllerAdvice

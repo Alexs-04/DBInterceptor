@@ -1,8 +1,22 @@
-package atlix.dbiceptor.logic.service
+package korebit.dbiceptor.logic.service
 
-import atlix.dbiceptor.model.schema.*
+import korebit.dbiceptor.model.schema.ColumnDiff
+import korebit.dbiceptor.model.schema.ColumnInfo
+import korebit.dbiceptor.model.schema.DatabaseInfo
+import korebit.dbiceptor.model.schema.FileStorageAnalysis
+import korebit.dbiceptor.model.schema.IndexInfo
+import korebit.dbiceptor.model.schema.MigrationAnalysis
+import korebit.dbiceptor.model.schema.SchemaComparison
+import korebit.dbiceptor.model.schema.SchemaInfo
+import korebit.dbiceptor.model.schema.SchemaSummary
+import korebit.dbiceptor.model.schema.TableComparison
+import korebit.dbiceptor.model.schema.TableDetails
+import korebit.dbiceptor.model.schema.TableInfo
+import korebit.dbiceptor.model.schema.TableWithFiles
 import org.springframework.jdbc.core.JdbcTemplate
 import org.springframework.stereotype.Service
+import java.sql.Timestamp
+import kotlin.collections.iterator
 
 @Service
 class SchemaService(val jdbcTemplate: JdbcTemplate) {
@@ -487,4 +501,126 @@ class SchemaService(val jdbcTemplate: JdbcTemplate) {
         return distribution
     }
 
+
+
+    fun getAllSchemas(): List<SchemaSummary> {
+        return try {
+            // Opción 1: Para Oracle - obtener todos los usuarios/esquemas
+            val schemas = jdbcTemplate.queryForList(
+                """SELECT username as schema_name,
+                   |       created,
+                   |       account_status,
+                   |       default_tablespace,
+                   |       temporary_tablespace
+                   |FROM all_users 
+                   |WHERE username NOT IN ('SYS', 'SYSTEM', 'DBSNMP', 'XDB', 'CTXSYS', 'OUTLN', 'ORACLE_OCM')
+                   |ORDER BY username""".trimMargin()
+            ).map { row ->
+                val schemaName = row["SCHEMA_NAME"] as String
+
+                // Obtener estadísticas del esquema
+                val tableCount = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM all_tables WHERE owner = ?",
+                    Int::class.java,
+                    schemaName
+                ) ?: 0
+
+                val viewCount = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM all_views WHERE owner = ?",
+                    Int::class.java,
+                    schemaName
+                ) ?: 0
+
+                // Estimar tamaño (aproximado)
+                val estimatedSize = estimateSchemaSize(schemaName)
+
+                SchemaSummary(
+                    name = schemaName,
+                    tableCount = tableCount,
+                    viewCount = viewCount,
+                    estimatedSizeMB = estimatedSize,
+                    created = row["CREATED"] as? Timestamp,
+                    accountStatus = row["ACCOUNT_STATUS"] as? String ?: "UNKNOWN",
+                    defaultTablespace = row["DEFAULT_TABLESPACE"] as? String,
+                    hasFiles = hasFilesInSchema(schemaName)
+                )
+            }
+
+            schemas
+        } catch (e: Exception) {
+            println("Error obteniendo schemas: ${e.message}")
+
+            // Opción 2: Si falla, obtener solo los esquemas con tablas
+            try {
+                jdbcTemplate.queryForList(
+                    "SELECT DISTINCT owner FROM all_tables WHERE owner NOT IN ('SYS', 'SYSTEM') ORDER BY owner",
+                    String::class.java
+                ).map { schemaName ->
+                    SchemaSummary(
+                        name = schemaName,
+                        tableCount = 0,
+                        viewCount = 0,
+                        estimatedSizeMB = 0,
+                        hasFiles = false
+                    )
+                }
+            } catch (e2: Exception) {
+                emptyList()
+            }
+        }
+    }
+
+    private fun estimateSchemaSize(schemaName: String): Long {
+        return try {
+            // Estimar tamaño sumando los tamaños de las tablas
+            val sizeBytes = jdbcTemplate.queryForObject(
+                """SELECT SUM(bytes) 
+                   |FROM (
+                   |    SELECT segment_name, SUM(bytes) as bytes
+                   |    FROM user_segments 
+                   |    WHERE segment_type IN ('TABLE', 'TABLE PARTITION', 'TABLE SUBPARTITION')
+                   |      AND owner = ?
+                   |    GROUP BY segment_name
+                   |)""".trimMargin(),
+                Long::class.java,
+                schemaName
+            ) ?: 0
+
+            sizeBytes / (1024 * 1024)  // Convertir a MB
+        } catch (e: Exception) {
+            // Si no se puede obtener el tamaño exacto, estimar por número de tablas
+            val tableCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM all_tables WHERE owner = ?",
+                Int::class.java,
+                schemaName
+            ) ?: 0
+
+            (tableCount * 10).toLong()  // Estimación: 10MB por tabla
+        }
+    }
+    private fun hasFilesInSchema(schemaName: String): Boolean {
+        return try {
+            val count = jdbcTemplate.queryForObject(
+                """SELECT COUNT(*) 
+                   |FROM all_tab_columns c
+                   |JOIN all_tables t ON c.owner = t.owner AND c.table_name = t.table_name
+                   |WHERE c.owner = ? 
+                   |  AND c.data_type IN ('BLOB', 'CLOB', 'NCLOB', 'BFILE', 'RAW', 'LONG RAW')""".trimMargin(),
+                Int::class.java,
+                schemaName
+            ) ?: 0
+
+            count > 0
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    // Método para obtener esquemas más populares/importantes
+    fun getImportantSchemas(): List<SchemaSummary> {
+        return getAllSchemas()
+            .filter { it.tableCount > 0 }  // Solo esquemas con tablas
+            .sortedByDescending { it.tableCount }  // Ordenar por número de tablas
+            .take(20)  // Limitar a 20 esquemas
+    }
 }

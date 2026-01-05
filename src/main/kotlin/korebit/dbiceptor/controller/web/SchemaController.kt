@@ -1,6 +1,6 @@
-package atlix.dbiceptor.controller.web
+package korebit.dbiceptor.controller.web
 
-import atlix.dbiceptor.logic.service.SchemaService
+import korebit.dbiceptor.logic.service.SchemaService
 import org.springframework.stereotype.Controller
 import org.springframework.ui.Model
 import org.springframework.web.bind.annotation.GetMapping
@@ -13,7 +13,51 @@ class SchemaController(private val schemaService: SchemaService) {
     @GetMapping("/")
     fun index(model: Model): String {
         model.addAttribute("dbInfo", schemaService.getDatabaseInfo())
+        // Agregar esquemas importantes para vista previa
+        model.addAttribute("importantSchemas", schemaService.getImportantSchemas().take(5))
         return "index"
+    }
+
+    @GetMapping("/schemas")
+    fun listAllSchemas(
+        @RequestParam(required = false) sortBy: String?,
+        @RequestParam(required = false) filter: String?,
+        model: Model
+    ): String {
+        var schemas = schemaService.getAllSchemas()
+
+        // Aplicar filtro si existe
+        filter?.let {
+            schemas = schemas.filter { schema ->
+                schema.name.contains(filter, ignoreCase = true) ||
+                        (schema.defaultTablespace?.contains(filter, ignoreCase = true) ?: false)
+            }
+        }
+
+        // Aplicar ordenamiento
+        schemas = when (sortBy) {
+            "name" -> schemas.sortedBy { it.name }
+            "tables" -> schemas.sortedByDescending { it.tableCount }
+            "size" -> schemas.sortedByDescending { it.estimatedSizeMB }
+            "created" -> schemas.sortedByDescending { it.created }
+            else -> schemas.sortedBy { it.name }  // Orden por defecto
+        }
+
+        val totalTables = schemas.sumOf { it.tableCount }
+        val totalViews = schemas.sumOf { it.viewCount }
+        val totalSizeMB = schemas.sumOf { it.estimatedSizeMB }
+        val schemasWithFiles = schemas.count { it.hasFiles }
+
+        model.addAttribute("schemas", schemas)
+        model.addAttribute("totalSchemas", schemas.size)
+        model.addAttribute("totalTables", totalTables)
+        model.addAttribute("totalViews", totalViews)
+        model.addAttribute("totalSizeMB", totalSizeMB)
+        model.addAttribute("schemasWithFiles", schemasWithFiles)
+        model.addAttribute("sortBy", sortBy)
+        model.addAttribute("filter", filter)
+
+        return "schemas"
     }
 
     @GetMapping("/schema")

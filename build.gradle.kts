@@ -6,7 +6,7 @@ plugins {
 	kotlin("plugin.jpa") version "2.2.21"
 }
 
-group = "atlix"
+group = "korebit"
 version = "1.0.0-SNAPSHOT"
 description = "comparador de bases de datos"
 

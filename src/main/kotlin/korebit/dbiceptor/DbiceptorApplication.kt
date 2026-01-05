@@ -1,4 +1,4 @@
-package atlix.dbiceptor
+package korebit.dbiceptor
 
 import org.springframework.boot.autoconfigure.SpringBootApplication
 import org.springframework.boot.runApplication
