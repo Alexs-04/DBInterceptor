@@ -1,26 +1,15 @@
-package korebit.dbiceptor.logic.service
+package korebit.dbiceptor.service
 
-import korebit.dbiceptor.model.schema.ColumnDiff
-import korebit.dbiceptor.model.schema.ColumnInfo
-import korebit.dbiceptor.model.schema.DatabaseInfo
-import korebit.dbiceptor.model.schema.FileStorageAnalysis
-import korebit.dbiceptor.model.schema.IndexInfo
-import korebit.dbiceptor.model.schema.MigrationAnalysis
-import korebit.dbiceptor.model.schema.SchemaComparison
-import korebit.dbiceptor.model.schema.SchemaInfo
-import korebit.dbiceptor.model.schema.SchemaSummary
-import korebit.dbiceptor.model.schema.TableComparison
-import korebit.dbiceptor.model.schema.TableDetails
-import korebit.dbiceptor.model.schema.TableInfo
-import korebit.dbiceptor.model.schema.TableWithFiles
+import korebit.dbiceptor.dto.*
 import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.jdbc.core.queryForList
+import org.springframework.jdbc.core.queryForObject
 import org.springframework.stereotype.Service
 import java.sql.Timestamp
 import kotlin.collections.iterator
 
 @Service
 class SchemaService(val jdbcTemplate: JdbcTemplate) {
-
     fun getTables(owner: String): List<TableInfo> {
         return jdbcTemplate.queryForList(
             "SELECT table_name, num_rows FROM all_tables WHERE owner = ? ORDER BY table_name",
@@ -87,9 +76,8 @@ class SchemaService(val jdbcTemplate: JdbcTemplate) {
             }
         }
 
-        val views = jdbcTemplate.queryForList(
+        val views = jdbcTemplate.queryForList<String>(
             "SELECT view_name FROM all_views WHERE owner = ?",
-            String::class.java,
             owner.uppercase()
         )
 
@@ -107,9 +95,9 @@ class SchemaService(val jdbcTemplate: JdbcTemplate) {
         val s1 = getSchema(schema1)
         val s2 = getSchema(schema2)
 
-        val onlyInSchema1 = s1.tables.map { it.name }.minus(s2.tables.map { it.name })
-        val onlyInSchema2 = s2.tables.map { it.name }.minus(s1.tables.map { it.name })
-        val commonTables = s1.tables.map { it.name }.intersect(s2.tables.map { it.name })
+        val onlyInSchema1 = s1.tables.map { it.name }.minus(s2.tables.map { it.name }.toSet())
+        val onlyInSchema2 = s2.tables.map { it.name }.minus(s1.tables.map { it.name }.toSet())
+        val commonTables = s1.tables.map { it.name }.intersect(s2.tables.map { it.name }.toSet())
 
         val tableDifferences = mutableMapOf<String, TableComparison>()
 
@@ -200,6 +188,7 @@ class SchemaService(val jdbcTemplate: JdbcTemplate) {
                         column.precision != null -> "NUMERIC(${column.precision})"
                         else -> "NUMERIC"
                     }
+
                     oracleType.contains("DATE") -> "TIMESTAMP"
                     oracleType.contains("TIMESTAMP") -> "TIMESTAMP"
                     oracleType.contains("CLOB") -> "TEXT"
@@ -233,7 +222,14 @@ class SchemaService(val jdbcTemplate: JdbcTemplate) {
         recommendations.addAll(fileAnalysis.recommendations)
 
         if (fileAnalysis.totalTablesWithFiles > 0) {
-            compatibilityIssues.add("Se detectaron ${fileAnalysis.totalTablesWithFiles} tablas con almacenamiento de archivos (${String.format("%.2f", fileAnalysis.estimatedTotalSizeMB/1024.0)} GB)")
+            compatibilityIssues.add(
+                "Se detectaron ${fileAnalysis.totalTablesWithFiles} tablas con almacenamiento de archivos (${
+                    String.format(
+                        "%.2f",
+                        fileAnalysis.estimatedTotalSizeMB / 1024.0
+                    )
+                } GB)"
+            )
         }
 
         // Recomendaciones generales
@@ -257,7 +253,8 @@ class SchemaService(val jdbcTemplate: JdbcTemplate) {
     }
 
     fun getDatabaseInfo(): DatabaseInfo {
-        val metaData = jdbcTemplate.dataSource?.connection?.metaData ?: throw Exception("No se pudo obtener metadata de la base de datos")
+        val metaData = jdbcTemplate.dataSource?.connection?.metaData
+            ?: throw Exception("No se pudo obtener metadata de la base de datos")
         return DatabaseInfo(
             databaseProductName = metaData.databaseProductName,
             databaseProductVersion = metaData.databaseProductVersion,
@@ -325,7 +322,14 @@ class SchemaService(val jdbcTemplate: JdbcTemplate) {
             val totalSizeMB = totalFileSize.values.sum()
 
             if (totalSizeMB > 1024) { // Más de 1GB
-                recommendations.add("ALTO VOLUMEN: Se detectaron ${tablesWithFiles.size} tablas con ${String.format("%.2f", totalSizeMB/1024.0)} GB de archivos")
+                recommendations.add(
+                    "ALTO VOLUMEN: Se detectaron ${tablesWithFiles.size} tablas con ${
+                        String.format(
+                            "%.2f",
+                            totalSizeMB / 1024.0
+                        )
+                    } GB de archivos"
+                )
                 recommendations.add("Considerar migrar archivos a sistema de archivos o servicio de almacenamiento en la nube")
             }
 
@@ -362,13 +366,12 @@ class SchemaService(val jdbcTemplate: JdbcTemplate) {
     private fun estimateFileSize(owner: String, tableName: String, blobColumns: List<String>): Long {
         return try {
             // Estimar tamaño basado en estadísticas de Oracle
-            val result = jdbcTemplate.queryForObject(
+            val result = jdbcTemplate.queryForObject<Long>(
                 """SELECT SUM(data_length) 
                    |FROM all_tab_columns 
                    |WHERE owner = ? AND table_name = ? 
                    |  AND column_name IN (${blobColumns.map { "'${it.split(':')[0]}'" }.joinToString(", ")})
                    |  AND data_type IN ('BLOB', 'CLOB', 'RAW')""".trimMargin(),
-                Long::class.java,
                 owner.uppercase(), tableName.uppercase()
             ) ?: 0
 
@@ -416,9 +419,8 @@ class SchemaService(val jdbcTemplate: JdbcTemplate) {
 
     private fun getTableRowCount(owner: String, tableName: String): Long {
         return try {
-            jdbcTemplate.queryForObject(
+            jdbcTemplate.queryForObject<Long>(
                 "SELECT num_rows FROM all_tables WHERE owner = ? AND table_name = ?",
-                Long::class.java,
                 owner.uppercase(), tableName.uppercase()
             ) ?: 0
         } catch (e: Exception) {
@@ -426,10 +428,10 @@ class SchemaService(val jdbcTemplate: JdbcTemplate) {
         }
     }
 
-    private fun getSampleFilenames(owner: String, tableName: String, fileTypes: List<String>): List<String> {
+    private fun getSampleFilenames(owner: String, tableName: String, fileTypes: List<String>): List<String?> {
         return try {
             // Buscar columnas que podrían contener nombres de archivo
-            val filenameColumns = jdbcTemplate.queryForList(
+            val filenameColumns = jdbcTemplate.queryForList<String>(
                 """SELECT column_name 
                    |FROM all_tab_columns 
                    |WHERE owner = ? AND table_name = ? 
@@ -437,18 +439,16 @@ class SchemaService(val jdbcTemplate: JdbcTemplate) {
                    |       OR column_name LIKE '%FILE%' 
                    |       OR column_name LIKE '%ARCHIVO%'
                    |       OR data_type LIKE '%CHAR%')""".trimMargin(),
-                String::class.java,
                 owner.uppercase(), tableName.uppercase()
             )
 
             if (filenameColumns.isNotEmpty()) {
                 val sampleColumn = filenameColumns.first()
-                jdbcTemplate.queryForList(
+                jdbcTemplate.queryForList<String>(
                     """SELECT DISTINCT ${sampleColumn} 
                        |FROM ${owner}.${tableName} 
                        |WHERE ${sampleColumn} IS NOT NULL 
-                       |  AND ROWNUM <= 5""".trimMargin(),
-                    String::class.java
+                       |  AND ROWNUM <= 5""".trimMargin()
                 )
             } else {
                 emptyList()
@@ -502,7 +502,6 @@ class SchemaService(val jdbcTemplate: JdbcTemplate) {
     }
 
 
-
     fun getAllSchemas(): List<SchemaSummary> {
         return try {
             // Opción 1: Para Oracle - obtener todos los usuarios/esquemas
@@ -552,9 +551,8 @@ class SchemaService(val jdbcTemplate: JdbcTemplate) {
 
             // Opción 2: Si falla, obtener solo los esquemas con tablas
             try {
-                jdbcTemplate.queryForList(
-                    "SELECT DISTINCT owner FROM all_tables WHERE owner NOT IN ('SYS', 'SYSTEM') ORDER BY owner",
-                    String::class.java
+                jdbcTemplate.queryForList<String>(
+                    "SELECT DISTINCT owner FROM all_tables WHERE owner NOT IN ('SYS', 'SYSTEM') ORDER BY owner"
                 ).map { schemaName ->
                     SchemaSummary(
                         name = schemaName,
@@ -573,7 +571,7 @@ class SchemaService(val jdbcTemplate: JdbcTemplate) {
     private fun estimateSchemaSize(schemaName: String): Long {
         return try {
             // Estimar tamaño sumando los tamaños de las tablas
-            val sizeBytes = jdbcTemplate.queryForObject(
+            val sizeBytes = jdbcTemplate.queryForObject<Long>(
                 """SELECT SUM(bytes) 
                    |FROM (
                    |    SELECT segment_name, SUM(bytes) as bytes
@@ -582,31 +580,29 @@ class SchemaService(val jdbcTemplate: JdbcTemplate) {
                    |      AND owner = ?
                    |    GROUP BY segment_name
                    |)""".trimMargin(),
-                Long::class.java,
                 schemaName
             ) ?: 0
 
             sizeBytes / (1024 * 1024)  // Convertir a MB
         } catch (e: Exception) {
             // Si no se puede obtener el tamaño exacto, estimar por número de tablas
-            val tableCount = jdbcTemplate.queryForObject(
+            val tableCount = jdbcTemplate.queryForObject<Int>(
                 "SELECT COUNT(*) FROM all_tables WHERE owner = ?",
-                Int::class.java,
                 schemaName
             ) ?: 0
 
             (tableCount * 10).toLong()  // Estimación: 10MB por tabla
         }
     }
+
     private fun hasFilesInSchema(schemaName: String): Boolean {
         return try {
-            val count = jdbcTemplate.queryForObject(
+            val count = jdbcTemplate.queryForObject<Int>(
                 """SELECT COUNT(*) 
                    |FROM all_tab_columns c
                    |JOIN all_tables t ON c.owner = t.owner AND c.table_name = t.table_name
                    |WHERE c.owner = ? 
                    |  AND c.data_type IN ('BLOB', 'CLOB', 'NCLOB', 'BFILE', 'RAW', 'LONG RAW')""".trimMargin(),
-                Int::class.java,
                 schemaName
             ) ?: 0
 

@@ -1,6 +1,6 @@
-package korebit.dbiceptor.controller.web
+package korebit.dbiceptor.controller
 
-import korebit.dbiceptor.logic.service.SchemaService
+import korebit.dbiceptor.service.SchemaService
 import org.springframework.stereotype.Controller
 import org.springframework.ui.Model
 import org.springframework.web.bind.annotation.GetMapping
@@ -29,7 +29,7 @@ class SchemaController(private val schemaService: SchemaService) {
         // Aplicar filtro si existe
         filter?.let {
             schemas = schemas.filter { schema ->
-                schema.name.contains(filter, ignoreCase = true) ||
+                schema.name?.contains(filter, ignoreCase = true) == true ||
                         (schema.defaultTablespace?.contains(filter, ignoreCase = true) ?: false)
             }
         }
