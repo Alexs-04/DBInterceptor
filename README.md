@@ -6,8 +6,7 @@
 
 ### Overview
 
-It is in an application designed to analyze the complexity of migrating ORACLE databases to POSTGRESQL. In addition to
-analyzing its table content, that is, identifying data types, names or files that should not be there.
+DBInterceptor is an application designed to analyze the complexity of migrating Oracle databases to PostgreSQL
 
 ### Features
 
