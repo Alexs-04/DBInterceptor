@@ -29,8 +29,8 @@ class SchemaComparisonService(
         val tableDifferences = mutableMapOf<String, TableComparison>()
 
         for (table in commonTables) {
-            val table1 = s1.tableDetails[table]!!
-            val table2 = s2.tableDetails[table]!!
+            val table1 = s1.tableDetails[table] ?: continue
+            val table2 = s2.tableDetails[table] ?: continue
 
             val columnDiff = compareColumns(table1.columns, table2.columns)
             val indexDiff = compareIndexes(table1.indexes, table2.indexes)
