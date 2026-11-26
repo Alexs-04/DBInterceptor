@@ -1,8 +1,11 @@
 <!DOCTYPE html>
 <html lang="es" xmlns:th="http://www.thymeleaf.org">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Resultado de Comparación</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
     <style>
         .diff-added { background-color: #d4edda; }
         .diff-removed { background-color: #f8d7da; }
@@ -10,15 +13,21 @@
     </style>
 </head>
 <body>
-<div class="container mt-5">
-    <h1>Comparación: <span th:text="${comparison.schema1Name}"></span> vs <span th:text="${comparison.schema2Name}"></span></h1>
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+    <div class="container">
+        <a class="navbar-brand" href="/"><i class="bi bi-database"></i> DB Inspector</a>
+        <span class="navbar-text text-light"><i class="bi bi-arrow-left-right"></i> Resultado de Comparación</span>
+    </div>
+</nav>
+<div class="container mt-4">
+    <h1 class="h2 text-break">Comparación: <span th:text="${comparison.schema1Name}"></span> vs <span th:text="${comparison.schema2Name}"></span></h1>
 
     <div class="row mt-4">
-        <div class="col-md-6">
-            <div class="card">
+        <div class="col-md-6 mb-3">
+            <div class="card h-100">
                 <div class="card-header bg-info text-white">
                     Solo en <span th:text="${comparison.schema1Name}"></span>
-                    <span class="badge bg-light text-dark" th:text="${comparison.onlyInSchema1.size}"></span>
+                    <span class="badge bg-light text-dark" th:text="${comparison.onlyInSchema1.size()}"></span>
                 </div>
                 <div class="card-body">
                     <ul th:if="${not comparison.onlyInSchema1.empty}">
@@ -29,11 +38,11 @@
             </div>
         </div>
 
-        <div class="col-md-6">
-            <div class="card">
+        <div class="col-md-6 mb-3">
+            <div class="card h-100">
                 <div class="card-header bg-info text-white">
                     Solo en <span th:text="${comparison.schema2Name}"></span>
-                    <span class="badge bg-light text-dark" th:text="${comparison.onlyInSchema2.size}"></span>
+                    <span class="badge bg-light text-dark" th:text="${comparison.onlyInSchema2.size()}"></span>
                 </div>
                 <div class="card-body">
                     <ul th:if="${not comparison.onlyInSchema2.empty}">
@@ -45,12 +54,12 @@
         </div>
     </div>
 
-    <div class="card mt-4" th:if="${not comparison.tableDifferences.empty}">
+    <div class="card mt-3" th:if="${not comparison.tableDifferences.empty}">
         <div class="card-header bg-warning">
             Diferencias en Tablas Comunes
         </div>
         <div class="card-body">
-            <div th:each="entry : ${comparison.tableDifferences}">
+            <div th:each="entry, iter : ${comparison.tableDifferences}">
                 <h5 th:text="${entry.key}"></h5>
                 <div th:if="${not entry.value.columnDifferences.empty}">
                     <h6>Diferencias en Columnas:</h6>
@@ -64,7 +73,7 @@
                         <li th:each="diff : ${entry.value.indexDifferences}" th:text="${diff}"></li>
                     </ul>
                 </div>
-                <hr>
+                <hr th:unless="${iter.last}">
             </div>
         </div>
     </div>
@@ -90,9 +99,10 @@
     </div>
 
     <div class="card mt-4">
-        <div class="card-header" th:classappend="${comparison.migrationAnalysis.compatible} ? 'bg-success' : 'bg-danger'">
+        <div class="card-header" th:classappend="${comparison.migrationAnalysis.compatible} ? 'bg-success text-white' : 'bg-danger text-white'">
             Análisis de Migración Oracle → PostgreSQL
-            <span th:text="${comparison.migrationAnalysis.compatible} ? '✓ COMPATIBLE' : '✗ PROBLEMAS'"></span>
+            <span class="badge bg-light text-dark ms-2"
+                  th:text="${comparison.migrationAnalysis.compatible} ? '✓ COMPATIBLE' : '✗ PROBLEMAS'"></span>
         </div>
         <div class="card-body">
             <p><strong>Complejidad estimada:</strong> <span th:text="${comparison.migrationAnalysis.estimatedComplexity}"></span></p>
@@ -111,7 +121,7 @@
                 </ul>
             </div>
 
-            <button class="btn btn-sm btn-info" type="button" data-bs-toggle="collapse"
+            <button class="btn btn-sm btn-info text-white" type="button" data-bs-toggle="collapse"
                     data-bs-target="#typeMappings">
                 Ver Mapeo de Tipos
             </button>
@@ -119,7 +129,8 @@
             <div class="collapse mt-3" id="typeMappings">
                 <div class="card card-body">
                     <h6>Mapeo de Tipos Oracle → PostgreSQL:</h6>
-                    <table class="table table-sm">
+                    <div class="table-responsive">
+                    <table class="table table-sm mb-0">
                         <thead>
                         <tr>
                             <th>Columna</th>
@@ -133,12 +144,20 @@
                         </tr>
                         </tbody>
                     </table>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <a href="/" class="btn btn-secondary mt-3">Volver al Inicio</a>
+    <div class="my-4">
+        <a href="/compare" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left"></i> Nueva comparación
+        </a>
+        <a href="/" class="btn btn-outline-secondary ms-2">
+            <i class="bi bi-house"></i> Inicio
+        </a>
+    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>

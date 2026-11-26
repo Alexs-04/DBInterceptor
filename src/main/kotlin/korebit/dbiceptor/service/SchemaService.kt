@@ -14,11 +14,6 @@ class SchemaService(
     private val fileStorageAnalysisService: FileStorageAnalysisService
 ) {
     /**
-     * Returns tables for a schema owner.
-     */
-    fun getTables(owner: String): List<TableInfo> = schemaMetadataService.getTables(owner)
-
-    /**
      * Returns column and index details for a table.
      */
     fun getTableDetails(owner: String, tableName: String): TableDetails? =
@@ -56,9 +51,4 @@ class SchemaService(
      * Returns a list of schemas with summary statistics.
      */
     fun getAllSchemas(): List<SchemaSummary> = schemaMetadataService.getAllSchemas()
-
-    /**
-     * Returns the most relevant schemas sorted by table count.
-     */
-    fun getImportantSchemas(): List<SchemaSummary> = schemaMetadataService.getImportantSchemas()
 }

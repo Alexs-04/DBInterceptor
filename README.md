@@ -33,11 +33,14 @@ DBInterceptor is an application designed to analyze the complexity of migrating 
    ./gradlew bootRun
     ```
 
-If you prefer usingDocker, you can build and run the Docker container:
+If you prefer using Docker, you can build and run the Docker container:
 
    ```bash
    docker build -t dbinterceptor:1.0 .
-   docker run -p 8080:8080 dbinterceptor:1.0
+   docker run -p 8080:8080 \
+     -e DB_URL=jdbc:oracle:thin:@//host:1521/ORCLPDB1 \
+     -e DB_USERNAME=usuario -e DB_PASSWORD=secreto \
+     dbinterceptor:1.0
    ``` 
 
 Or using docker-compose:
@@ -55,11 +58,46 @@ Or using docker-compose:
       ports:
         - "8080:8080"
       container_name: db-interceptor
+      environment:
+        DB_URL: jdbc:oracle:thin:@//host:1521/ORCLPDB1
+        DB_USERNAME: usuario
+        DB_PASSWORD: secreto
+  ```
+
+---
+
+### Configuration
+
+The connection is configured through environment variables (see `application.properties`):
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `DB_URL` | yes | – | Oracle JDBC URL |
+| `DB_USERNAME` | yes | – | Database user |
+| `DB_PASSWORD` | yes | – | Database password |
+| `DB_POOL_SIZE` | no | `10` | Maximum connections in the pool |
+| `DB_CONNECTION_TIMEOUT_MS` | no | `30000` | Wait for a free connection (ms) |
+| `DB_FETCH_SIZE` | no | `1000` | Rows fetched per round trip |
+| `DB_QUERY_TIMEOUT` | no | `120s` | Timeout for each query |
+| `THYMELEAF_CACHE` | no | `true` | Template cache (`bootRun` with DevTools disables it) |
+
+A user with `SELECT_CATALOG_ROLE` gets exact sizes and account status (`DBA_USERS`, `DBA_SEGMENTS`, `DBA_LOBS`);
+without it the application falls back to `ALL_*` views and optimizer statistics.
+
+### Tests
+
+```bash
+./gradlew test
+```
+
+The tests need no Oracle database: views are rendered with a mocked service and the catalog queries
+run against H2 in Oracle mode.
+
 ---
 
 ### Usage
 
-1. Configure database connection settings in `application.properties`.
+1. Set the `DB_URL`, `DB_USERNAME` and `DB_PASSWORD` environment variables.
 2. Start the application using the command above.
 3. Access the application via `http://localhost:8080`.
 4. Follow the on-screen instructions to analyze your database.

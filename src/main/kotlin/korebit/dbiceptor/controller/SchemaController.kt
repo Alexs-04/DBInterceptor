@@ -13,8 +13,6 @@ class SchemaController(private val schemaService: SchemaService) {
     @GetMapping("/")
     fun index(model: Model): String {
         model.addAttribute("dbInfo", schemaService.getDatabaseInfo())
-        // Agregar esquemas importantes para vista previa
-        model.addAttribute("importantSchemas", schemaService.getImportantSchemas().take(5))
         return "index"
     }
 
@@ -24,6 +22,8 @@ class SchemaController(private val schemaService: SchemaService) {
         @RequestParam(required = false) filter: String?,
         model: Model
     ): String {
+        val filter = filter?.trim()?.takeIf { it.isNotEmpty() }
+        val sortBy = sortBy?.takeIf { it.isNotBlank() }
         var schemas = schemaService.getAllSchemas()
 
         // Aplicar filtro si existe
@@ -70,20 +70,14 @@ class SchemaController(private val schemaService: SchemaService) {
         model.addAttribute("schema", schema)
         model.addAttribute("owner", owner)
         model.addAttribute("debug", debug ?: false)
-
-        // Log para debug
-        println("Schema loaded: ${schema.owner}")
-        println("Total tables: ${schema.totalTables}")
-        println("Total views: ${schema.totalViews}")
-        println("Table details size: ${schema.tableDetails.size}")
+        model.addAttribute("totalColumns", schema.tableDetails.values.sumOf { it.columns.size })
+        model.addAttribute("totalRows", schema.tables.sumOf { it.rowCount })
 
         return "schema"
     }
 
     @GetMapping("/compare")
-    fun compareForm(model: Model): String {
-        return "compare"
-    }
+    fun compareForm(): String = "compare"
 
     @PostMapping("/compare")
     fun compareSchemas(
@@ -127,11 +121,7 @@ class SchemaController(private val schemaService: SchemaService) {
         @RequestParam owner: String,
         model: Model
     ): String {
-        val analysis = schemaService.analyzeTablesWithFiles(owner)
-        val schema = schemaService.getSchema(owner)
-
-        model.addAttribute("analysis", analysis)
-        model.addAttribute("schema", schema)
+        model.addAttribute("analysis", schemaService.analyzeTablesWithFiles(owner))
         model.addAttribute("owner", owner)
 
         return "file-analysis"
