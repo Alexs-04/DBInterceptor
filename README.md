@@ -84,6 +84,16 @@ The connection is configured through environment variables (see `application.pro
 A user with `SELECT_CATALOG_ROLE` gets exact sizes and account status (`DBA_USERS`, `DBA_SEGMENTS`, `DBA_LOBS`);
 without it the application falls back to `ALL_*` views and optimizer statistics.
 
+### Screenshots
+![""](img/illustrative-img-5.jpeg)
+
+![""](img/illustrative-img-4.jpeg)
+
+![""](img/illustrative-img-3.jpeg)
+
+![""](img/illustrative-img-2.jpeg)
+
+---
 ### Tests
 
 ```bash
